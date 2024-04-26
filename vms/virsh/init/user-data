@@ -1,0 +1,36 @@
+#cloud-config
+
+package_update: true
+package_upgrade: true
+package_reboot_if_required: true
+
+packages:
+ - cni-plugin-flannel
+ - cni-plugins
+ - flannel
+ - flannel-contrib-cni
+ - kubelet
+ - kubeadm
+ - kubectl
+ - containerd
+ - uuidgen
+ - openssh-server-pam
+
+ssh_pwauth: true # sshd service will be configured to accept password authentication method
+password: changeme # Set a password for alpine
+chpasswd:
+    expire: false # Don't ask for password reset after the first log-in
+ssh_authorized_keys:
+- ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAWGD5oqvpw2/pSdqDxok3lYcnR5yFIUQrbmeMUSpbXS thomas@hermione
+
+users:
+- default
+- name: k8s
+  doas:
+  - permit nopass k8s as root
+  ssh_authorized_keys:
+  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAWGD5oqvpw2/pSdqDxok3lYcnR5yFIUQrbmeMUSpbXS thomas@hermione
+
+runcmd:
+  - sed -i 's/^#UsePAM no/UsePAM yes/' /etc/ssh/sshd_config && /etc/init.d/sshd restart
+  
