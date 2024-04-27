@@ -3,7 +3,30 @@
 package_update: true
 package_upgrade: true
 package_reboot_if_required: true
+#package_reboot: true
 
+write_files:
+  - path: /etc/apk/repositories
+    content: |
+      #https://dl-cdn.alpinelinux.org/alpine/v3.19/testing
+      http://dl-cdn.alpinelinux.org/alpine/edge/community
+      http://dl-cdn.alpinelinux.org/alpine/edge/testing
+    append: true
+  - path: /etc/modules-load.d/k8s.conf
+    content: |
+      br_netfilter
+  - path: /etc/sysctl.conf
+    content: |
+      net.bridge.bridge-nf-call-iptables=1
+      net.ipv4.ip_forward=1
+  - path: /etc/crictl.yaml
+    content: |
+      runtime-endpoint: unix:///run/containerd/containerd.sock
+      image-endpoint: unix:///run/containerd/containerd.sock
+      timeout: 2
+      pull-image-on-create: false
+
+    
 packages:
  - cni-plugin-flannel
  - cni-plugins
@@ -13,6 +36,8 @@ packages:
  - kubeadm
  - kubectl
  - containerd
+ - containerd-ctr
+ - k9s
  - uuidgen
  - openssh-server-pam
 
@@ -32,5 +57,38 @@ users:
   - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAWGD5oqvpw2/pSdqDxok3lYcnR5yFIUQrbmeMUSpbXS thomas@hermione
 
 runcmd:
-  - sed -i 's/^#UsePAM no/UsePAM yes/' /etc/ssh/sshd_config && /etc/init.d/sshd restart
-  
+  - |
+    # mount -t tmpfs -o uid=0,gid=0,mode=0755 cgroup /sys/fs/cgroup
+    uuidgen > /etc/machine-id
+    sed -i 's/^#UsePAM no/UsePAM yes/' /etc/ssh/sshd_config && /etc/init.d/sshd restart
+    echo $(ifconfig eth0 | grep 'inet addr:' | cut -d: -f2| cut -d' ' -f1) $(hostname) >> /etc/hosts
+    (cd /lib/modules && ln -s 6.6.28-0-virt 6.6.14-0-virt && depmod)
+    modprobe br_netfilter
+    sed -ie '/swap/ s/^/#/' /etc/fstab && swapoff -a
+    mount --make-rshared /
+    echo "#!/bin/sh" > /etc/local.d/sharedmetrics.start
+    echo "mount --make-rshared /" >> /etc/local.d/sharedmetrics.start
+    chmod +x /etc/local.d/sharedmetrics.start
+    rc-update add local default
+    rc-update add cgroups
+    rc-update add containerd
+    rc-update add kubelet
+    rc-update add ntpd
+    rc-service ntpd start
+    rc-service cgroups start
+    rc-service containerd start
+    echo 1 > /proc/sys/net/ipv4/ip_forward
+    kubeadm config images pull
+    kubeadm init --pod-network-cidr=10.244.0.0/16 --node-name=$(hostname) --apiserver-advertise-address $(hostname -i) --control-plane-endpoint=$(hostname -i) --upload-certs
+    mkdir ~/.kube
+    mkdir -p /root/.kube/ && ln -s /etc/kubernetes/admin.conf /root/.kube/config
+    while ! kubectl cluster-info ; do echo waiting for api server ; sleep 1; done
+    kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+    kubectl taint nodes --all node-role.kubernetes.io/control-plane-
+    echo "cloud-init schema"
+    cloud-init schema --system
+    echo "cloud-init status"
+    cloud-init status --long
+
+
+ 
