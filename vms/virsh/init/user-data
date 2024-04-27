@@ -82,6 +82,7 @@ runcmd:
     kubeadm init --pod-network-cidr=10.244.0.0/16 --node-name=$(hostname) --apiserver-advertise-address $(hostname -i) --control-plane-endpoint=$(hostname -i) --upload-certs
     mkdir ~/.kube
     mkdir -p /root/.kube/ && ln -s /etc/kubernetes/admin.conf /root/.kube/config
+    export KUBECONFIG=/etc/kubernetes/admin.conf
     while ! kubectl cluster-info ; do echo waiting for api server ; sleep 1; done
     kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
     kubectl taint nodes --all node-role.kubernetes.io/control-plane-

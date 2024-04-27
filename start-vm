@@ -1,0 +1,13 @@
+
+NAME=$1
+
+
+./delete-vm  $NAME
+./create-vm -x -n $NAME -i ${PWD}/vms/virsh/base/nocloud_alpine-3.19.1-x86_64-bios-cloudinit-r0.qcow2 -k ~/.ssh/id_ed25519.pub -u k8s -m52:54:00:0f:0e:9e 
+
+virsh console alpine
+
+ssh-keygen -f "$HOME/.ssh/known_hosts" -R $(get-vm-ip $NAME)
+
+ssh k8s@$(get-vm-ip alpine)
+
